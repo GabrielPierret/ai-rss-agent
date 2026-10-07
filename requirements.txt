@@ -1,0 +1,4 @@
+feedparser
+PyYAML
+openai
+python-dotenv

@@ -1,0 +1,9 @@
+feeds:
+  - name: OpenAI
+    url: https://openai.com/news/rss.xml
+
+  - name: Hugging Face
+    url: https://huggingface.co/blog/feed.xml
+
+  - name: MIT Technology Review AI
+    url: https://www.technologyreview.com/topic/artificial-intelligence/feed/
