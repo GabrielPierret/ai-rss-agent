@@ -1,0 +1,217 @@
+{
+  "name": "03 - Coach TOEIC",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "c3d4e5f6-0001-4000-8000-000000000001",
+      "name": "Chaque matin 7h30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://podcasts.files.bbci.co.uk/p02pc9tn.rss"
+      },
+      "id": "c3d4e5f6-0002-4000-8000-000000000002",
+      "name": "BBC 6 Minute English",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        240,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.bbci.co.uk/news/technology/rss.xml"
+      },
+      "id": "c3d4e5f6-0003-4000-8000-000000000003",
+      "name": "BBC News Technology",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c3d4e5f6-0004-4000-8000-000000000004",
+      "name": "Attendre les 2 flux",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dernier épisode 6 Minute English + 5 titres d'actualité en anglais (source du vocabulaire)\nconst episode = $('BBC 6 Minute English').first().json;\nconst news = $('BBC News Technology').all().slice(0, 5).map(i => i.json);\n\nconst articles = news\n  .map(a => `- ${a.title}: ${(a.contentSnippet || '').slice(0, 250)}`)\n  .join('\\n');\n\nreturn [{ json: {\n  episode: { title: episode.title, link: episode.link || episode.guid || '' },\n  articles,\n} }];"
+      },
+      "id": "c3d4e5f6-0005-4000-8000-000000000005",
+      "name": "Préparer le contenu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'gpt-5-mini',\n  reasoning_effort: 'low',\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: \"You are a TOEIC coach for a French learner aiming for a score of 800 (B2). Reply only with JSON in this exact shape: {\\\"theme\\\": string, \\\"vocab\\\": [{\\\"word\\\": string, \\\"fr\\\": string, \\\"example\\\": string}], \\\"quiz\\\": [{\\\"question\\\": string, \\\"options\\\": [string, string, string, string], \\\"answer\\\": \\\"A\\\"|\\\"B\\\"|\\\"C\\\"|\\\"D\\\", \\\"explanation_fr\\\": string}], \\\"tip_fr\\\": string}. vocab: exactly 10 useful B2 words or collocations taken from or inspired by the articles, with French translation and a short business-style example sentence. quiz: exactly 5 TOEIC Part 5 questions (sentence with a blank shown as ____, business context, testing grammar or vocabulary), explanation in French in one sentence. tip_fr: one practical TOEIC tip in French.\" },\n    { role: 'user', content: \"Today's English news headlines:\\n\" + $json.articles }\n  ]\n}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "c3d4e5f6-0006-4000-8000-000000000006",
+      "name": "Générer vocabulaire et quiz",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construit le mail : écoute, vocabulaire, quiz, puis corrections tout en bas\nconst r = JSON.parse($input.first().json.choices[0].message.content);\nconst ep = $('Préparer le contenu').first().json.episode;\nconst esc = s => String(s ?? '').replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\n\nlet html = `<h2>Coach TOEIC du jour : ${esc(r.theme)}</h2>`;\nhtml += `<h3>1. Écoute (Parts 1 à 4)</h3><p><a href=\"${esc(ep.link)}\">${esc(ep.title)}</a><br>Écoute une fois sans texte, puis une deuxième fois en notant 3 mots nouveaux.</p>`;\nhtml += `<h3>2. 10 mots du jour</h3><ul>` + r.vocab.map(v =>\n  `<li><strong>${esc(v.word)}</strong> : ${esc(v.fr)}<br><em>${esc(v.example)}</em></li>`).join('') + `</ul>`;\nhtml += `<h3>3. Quiz Part 5</h3><ol>` + r.quiz.map(q =>\n  `<li>${esc(q.question)}<br>` + q.options.map((o, i) => `(${'ABCD'[i]}) ${esc(o)}`).join(' &nbsp; ') + `</li>`).join('') + `</ol>`;\nhtml += `<p><strong>Astuce :</strong> ${esc(r.tip_fr)}</p>`;\nhtml += `<p>Réponses plus bas. Essaie d'abord !</p>` + '<br>'.repeat(20);\nhtml += `<h3>Corrections</h3><ol>` + r.quiz.map(q =>\n  `<li><strong>${esc(q.answer)}</strong> : ${esc(q.explanation_fr)}</li>`).join('') + `</ol>`;\n\nreturn [{ json: { html, subject: `Coach TOEIC : ${r.theme}` } }];"
+      },
+      "id": "c3d4e5f6-0007-4000-8000-000000000007",
+      "name": "Mise en forme du mail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "TON_ADRESSE@gmail.com",
+        "toEmail": "TON_ADRESSE@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "c3d4e5f6-0008-4000-8000-000000000008",
+      "name": "Envoyer le mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1440,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Chaque matin 7h30": {
+      "main": [
+        [
+          {
+            "node": "BBC 6 Minute English",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "BBC News Technology",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BBC 6 Minute English": {
+      "main": [
+        [
+          {
+            "node": "Attendre les 2 flux",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BBC News Technology": {
+      "main": [
+        [
+          {
+            "node": "Attendre les 2 flux",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Attendre les 2 flux": {
+      "main": [
+        [
+          {
+            "node": "Préparer le contenu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer le contenu": {
+      "main": [
+        [
+          {
+            "node": "Générer vocabulaire et quiz",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer vocabulaire et quiz": {
+      "main": [
+        [
+          {
+            "node": "Mise en forme du mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mise en forme du mail": {
+      "main": [
+        [
+          {
+            "node": "Envoyer le mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {}
+}
