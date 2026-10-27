@@ -7,7 +7,10 @@
       "name": "Lancer à la main",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [0, 100]
+      "position": [
+        0,
+        100
+      ]
     },
     {
       "parameters": {
@@ -24,7 +27,10 @@
       "name": "Toutes les 3 minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
@@ -36,7 +42,10 @@
       "name": "Lire les étiquettes",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [220, 200]
+      "position": [
+        220,
+        200
+      ]
     },
     {
       "parameters": {
@@ -52,18 +61,24 @@
       "name": "Lire 50 mails non triés",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [440, 200],
+      "position": [
+        440,
+        200
+      ],
       "executeOnce": true
     },
     {
       "parameters": {
-        "jsCode": "// Règles gratuites : lien de désabonnement ou onglet Promotions => newsletter.\n// Le reste sera classé par l'IA (expéditeur + objet + 300 caractères seulement).\nconst mails = $input.all().map(i => i.json).map(m => {\n  const entetes = JSON.stringify(m.headers || {}).toLowerCase();\n  const labels = m.labelIds || [];\n  const estNewsletter = entetes.includes('list-unsubscribe') || labels.includes('CATEGORY_PROMOTIONS');\n  return {\n    id: m.id,\n    de: m.from?.text || m.From || '',\n    objet: m.subject || m.Subject || '',\n    extrait: (m.text || m.snippet || '').replace(/\\s+/g, ' ').slice(0, 300),\n    categorie: estNewsletter ? 'newsletter' : null,\n  };\n});\n\nconst aAnalyser = mails\n  .filter(m => !m.categorie)\n  .map(m => ({ id: m.id, de: m.de, objet: m.objet, extrait: m.extrait }));\n\nreturn [{ json: { mails, aAnalyser } }];"
+        "jsCode": "// Règles gratuites : lien de désabonnement ou onglet Promotions => newsletter,\n// SAUF si l'objet contient un mot important : dans ce cas c'est l'IA qui décide.\nconst motsImportants = ['rendez-vous', 'rendez vous', 'rdv', 'entretien', 'candidature', 'recrutement', 'convocation',\n  'facture', 'commande', 'livraison', 'paiement', 'remboursement', 'reservation', 'confirmation', 'rappel',\n  'code', 'securite', 'mot de passe', 'connexion', 'impots', 'banque', 'echeance', 'contrat', 'attestation',\n  'examen', 'inscription', 'resultat'];\nconst simplifier = s => (s || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();\n\nconst mails = $input.all().map(i => i.json).map(m => {\n  const objet = m.subject || m.Subject || '';\n  const entetes = JSON.stringify(m.headers || {}).toLowerCase();\n  const labels = m.labelIds || [];\n  const resteNewsletter = entetes.includes('list-unsubscribe') || labels.includes('CATEGORY_PROMOTIONS');\n  const motImportant = motsImportants.some(mot => simplifier(objet).includes(mot));\n  return {\n    id: m.id,\n    de: m.from?.text || m.From || '',\n    objet,\n    extrait: (m.text || m.snippet || '').replace(/\\s+/g, ' ').slice(0, 300),\n    categorie: resteNewsletter && !motImportant ? 'newsletter' : null,\n  };\n});\n\nconst aAnalyser = mails\n  .filter(m => !m.categorie)\n  .map(m => ({ id: m.id, de: m.de, objet: m.objet, extrait: m.extrait }));\n\nreturn [{ json: { mails, aAnalyser } }];"
       },
       "id": "b2c3d4e5-0004-4000-8000-000000000004",
       "name": "Règles simples",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 200]
+      "position": [
+        660,
+        200
+      ]
     },
     {
       "parameters": {
@@ -82,7 +97,10 @@
       "name": "Classement IA",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 200]
+      "position": [
+        880,
+        200
+      ]
     },
     {
       "parameters": {
@@ -92,7 +110,10 @@
       "name": "Décision finale",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 200]
+      "position": [
+        1100,
+        200
+      ]
     },
     {
       "parameters": {
@@ -104,30 +125,89 @@
       "name": "Ajouter l'étiquette",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [1320, 200]
+      "position": [
+        1320,
+        200
+      ]
     }
   ],
   "connections": {
     "Lancer à la main": {
-      "main": [[{ "node": "Lire les étiquettes", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lire les étiquettes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Toutes les 3 minutes": {
-      "main": [[{ "node": "Lire les étiquettes", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lire les étiquettes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Lire les étiquettes": {
-      "main": [[{ "node": "Lire 50 mails non triés", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lire 50 mails non triés",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Lire 50 mails non triés": {
-      "main": [[{ "node": "Règles simples", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Règles simples",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Règles simples": {
-      "main": [[{ "node": "Classement IA", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Classement IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Classement IA": {
-      "main": [[{ "node": "Décision finale", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Décision finale",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Décision finale": {
-      "main": [[{ "node": "Ajouter l'étiquette", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Ajouter l'étiquette",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
