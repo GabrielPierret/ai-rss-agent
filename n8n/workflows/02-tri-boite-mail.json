@@ -65,11 +65,14 @@
         440,
         200
       ],
-      "executeOnce": true
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
-        "jsCode": "// Règles gratuites : lien de désabonnement ou onglet Promotions => newsletter,\n// SAUF si l'objet contient un mot important : dans ce cas c'est l'IA qui décide.\nconst motsImportants = ['rendez-vous', 'rendez vous', 'rdv', 'entretien', 'candidature', 'recrutement', 'convocation',\n  'facture', 'commande', 'livraison', 'paiement', 'remboursement', 'reservation', 'confirmation', 'rappel',\n  'code', 'securite', 'mot de passe', 'connexion', 'impots', 'banque', 'echeance', 'contrat', 'attestation',\n  'examen', 'inscription', 'resultat'];\nconst simplifier = s => (s || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();\n\nconst mails = $input.all().map(i => i.json).map(m => {\n  const objet = m.subject || m.Subject || '';\n  const entetes = JSON.stringify(m.headers || {}).toLowerCase();\n  const labels = m.labelIds || [];\n  const resteNewsletter = entetes.includes('list-unsubscribe') || labels.includes('CATEGORY_PROMOTIONS');\n  const motImportant = motsImportants.some(mot => simplifier(objet).includes(mot));\n  return {\n    id: m.id,\n    de: m.from?.text || m.From || '',\n    objet,\n    extrait: (m.text || m.snippet || '').replace(/\\s+/g, ' ').slice(0, 300),\n    categorie: resteNewsletter && !motImportant ? 'newsletter' : null,\n  };\n});\n\nconst aAnalyser = mails\n  .filter(m => !m.categorie)\n  .map(m => ({ id: m.id, de: m.de, objet: m.objet, extrait: m.extrait }));\n\nreturn [{ json: { mails, aAnalyser } }];"
+        "jsCode": "// Règles gratuites : lien de désabonnement ou onglet Promotions => newsletter,\n// SAUF si l'objet contient un mot important : dans ce cas c'est l'IA qui décide.\nconst motsImportants = ['rendez-vous', 'rendez vous', 'rdv', 'entretien', 'candidature', 'recrutement', 'convocation',\n  'facture', 'commande', 'livraison', 'paiement', 'remboursement', 'reservation', 'confirmation', 'rappel',\n  'code', 'securite', 'mot de passe', 'connexion', 'impots', 'banque', 'echeance', 'contrat', 'attestation',\n  'examen', 'inscription', 'resultat', 'papier'];\nconst simplifier = s => (s || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();\n\nconst mails = $input.all().map(i => i.json).map(m => {\n  const objet = m.subject || m.Subject || '';\n  const entetes = JSON.stringify(m.headers || {}).toLowerCase();\n  const labels = m.labelIds || [];\n  const resteNewsletter = entetes.includes('list-unsubscribe') || labels.includes('CATEGORY_PROMOTIONS');\n  const motImportant = motsImportants.some(mot => simplifier(objet).includes(mot));\n  return {\n    id: m.id,\n    de: m.from?.text || m.From || '',\n    objet,\n    extrait: (m.text || m.snippet || '').replace(/\\s+/g, ' ').slice(0, 300),\n    categorie: resteNewsletter && !motImportant ? 'newsletter' : null,\n  };\n});\n\nconst aAnalyser = mails\n  .filter(m => !m.categorie)\n  .map(m => ({ id: m.id, de: m.de, objet: m.objet, extrait: m.extrait }));\n\nreturn [{ json: { mails, aAnalyser } }];"
       },
       "id": "b2c3d4e5-0004-4000-8000-000000000004",
       "name": "Règles simples",
@@ -128,7 +131,10 @@
       "position": [
         1320,
         200
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     }
   ],
   "connections": {
