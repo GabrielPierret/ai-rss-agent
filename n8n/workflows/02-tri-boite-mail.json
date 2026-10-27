@@ -50,7 +50,7 @@
     {
       "parameters": {
         "operation": "getAll",
-        "limit": 100,
+        "limit": 50,
         "simple": false,
         "filters": {
           "q": "in:inbox -label:tri-important -label:tri-newsletter -label:tri-autre"
@@ -91,7 +91,7 @@
         "nodeCredentialType": "openAiApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  model: 'gpt-5-mini',\n  reasoning_effort: 'minimal',\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: \"Tu tries des mails personnels. 'important' = écrit par une vraie personne, ou banque, impôts/administration, santé, travail/études, logement, facture ou commande, sécurité du compte. 'autre' = tout le reste (notifications, réseaux sociaux, pubs). Réponds uniquement en JSON : {\\\"<id>\\\": \\\"important\\\" ou \\\"autre\\\"} pour chaque mail.\" },\n    { role: 'user', content: JSON.stringify($json.aAnalyser) }\n  ]\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'gpt-5-mini',\n  reasoning_effort: 'minimal',\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: \"Tu tries les mails personnels d'un étudiant en data/IA. Pour chaque mail, choisis UNE catégorie. important = info ou action personnelle à ne pas rater : rendez-vous, entretien, candidature, école, travail, banque (virement, paiement), impôts, administration, santé, logement, facture, commande, livraison, sécurité du compte (code, connexion), ou message écrit par une vraie personne. newsletter = envoi de masse : promo, pub, jeux, actualités, club, événement marketing. autre = notification automatique sans action : réseaux sociaux, suggestions LinkedIn, rappels d'application. En cas de doute entre important et autre, choisis important. Réponds uniquement en JSON : {\\\"<id>\\\": \\\"important\\\" ou \\\"newsletter\\\" ou \\\"autre\\\"} pour chaque mail.\" },\n    { role: 'user', content: JSON.stringify($json.aAnalyser) }\n  ]\n}) }}",
         "options": {
           "timeout": 180000
         }
@@ -107,7 +107,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Combine règles + IA et trouve l'ID Gmail de chaque étiquette Tri/...\nconst { mails } = $('Règles simples').first().json;\n\nlet ia = {};\ntry { ia = JSON.parse($input.first().json.choices[0].message.content); } catch (e) {}\n\n// Comparaison sans majuscules ni espaces : \"tri / important\" = \"Tri/Important\"\nconst norm = s => (s || '').toLowerCase().replace(/\\s+/g, '');\nconst etiquettes = $('Lire les étiquettes').all().map(l => l.json);\nconst ids = {};\nfor (const l of etiquettes) ids[norm(l.name)] = l.id;\n\nconst noms = { important: 'Tri/Important', newsletter: 'Tri/Newsletter', autre: 'Tri/Autre' };\nfor (const nom of Object.values(noms)) {\n  if (!ids[norm(nom)]) {\n    const perso = etiquettes.filter(l => l.type === 'user').map(l => l.name).join(', ');\n    throw new Error(`Étiquette Gmail introuvable : ${nom}. Étiquettes trouvées : ${perso || 'aucune'}`);\n  }\n}\n\nreturn mails.map(m => {\n  const categorie = m.categorie || (ia[m.id] === 'important' ? 'important' : 'autre');\n  return { json: { categorie, de: m.de, objet: m.objet, id: m.id, labelId: ids[norm(noms[categorie])] } };\n});"
+        "jsCode": "// Combine règles + IA et trouve l'ID Gmail de chaque étiquette Tri/...\nconst { mails } = $('Règles simples').first().json;\n\nlet ia = {};\ntry { ia = JSON.parse($input.first().json.choices[0].message.content); } catch (e) {}\n\n// Comparaison sans majuscules ni espaces : \"tri / important\" = \"Tri/Important\"\nconst norm = s => (s || '').toLowerCase().replace(/\\s+/g, '');\nconst etiquettes = $('Lire les étiquettes').all().map(l => l.json);\nconst ids = {};\nfor (const l of etiquettes) ids[norm(l.name)] = l.id;\n\nconst noms = { important: 'Tri/Important', newsletter: 'Tri/Newsletter', autre: 'Tri/Autre' };\nfor (const nom of Object.values(noms)) {\n  if (!ids[norm(nom)]) {\n    const perso = etiquettes.filter(l => l.type === 'user').map(l => l.name).join(', ');\n    throw new Error(`Étiquette Gmail introuvable : ${nom}. Étiquettes trouvées : ${perso || 'aucune'}`);\n  }\n}\n\nreturn mails.map(m => {\n  const categorie = m.categorie || (['important', 'newsletter', 'autre'].includes(ia[m.id]) ? ia[m.id] : 'important');\n  return { json: { categorie, de: m.de, objet: m.objet, id: m.id, labelId: ids[norm(noms[categorie])] } };\n});"
       },
       "id": "b2c3d4e5-0006-4000-8000-000000000006",
       "name": "Décision finale",
