@@ -1,0 +1,114 @@
+{
+  "name": "04 - Marquer tout comme lu (ponctuel)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "d4e5f6a7-0001-4000-8000-000000000001",
+      "name": "Lancer à la main",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "d4e5f6a7-0002-4000-8000-000000000002",
+      "name": "Toutes les 2 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 150,
+        "filters": {
+          "q": "is:unread"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0003-4000-8000-000000000003",
+      "name": "Lire 150 mails non lus",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $json.id }}"
+      },
+      "id": "d4e5f6a7-0004-4000-8000-000000000004",
+      "name": "Marquer comme lu",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Lancer à la main": {
+      "main": [
+        [
+          {
+            "node": "Lire 150 mails non lus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toutes les 2 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire 150 mails non lus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire 150 mails non lus": {
+      "main": [
+        [
+          {
+            "node": "Marquer comme lu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {}
+}
