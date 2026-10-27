@@ -1,0 +1,138 @@
+{
+  "name": "02 - Tri boîte mail",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b2c3d4e5-0001-4000-8000-000000000001",
+      "name": "Lancer à la main",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 100]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0008-4000-8000-000000000008",
+      "name": "Toutes les 3 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "resource": "label",
+        "operation": "getAll",
+        "returnAll": true
+      },
+      "id": "b2c3d4e5-0002-4000-8000-000000000002",
+      "name": "Lire les étiquettes",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [220, 200]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 100,
+        "simple": false,
+        "filters": {
+          "q": "in:inbox -label:tri-important -label:tri-newsletter -label:tri-autre"
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0003-4000-8000-000000000003",
+      "name": "Lire 50 mails non triés",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [440, 200],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Règles gratuites : lien de désabonnement ou onglet Promotions => newsletter.\n// Le reste sera classé par l'IA (expéditeur + objet + 300 caractères seulement).\nconst mails = $input.all().map(i => i.json).map(m => {\n  const entetes = JSON.stringify(m.headers || {}).toLowerCase();\n  const labels = m.labelIds || [];\n  const estNewsletter = entetes.includes('list-unsubscribe') || labels.includes('CATEGORY_PROMOTIONS');\n  return {\n    id: m.id,\n    de: m.from?.text || m.From || '',\n    objet: m.subject || m.Subject || '',\n    extrait: (m.text || m.snippet || '').replace(/\\s+/g, ' ').slice(0, 300),\n    categorie: estNewsletter ? 'newsletter' : null,\n  };\n});\n\nconst aAnalyser = mails\n  .filter(m => !m.categorie)\n  .map(m => ({ id: m.id, de: m.de, objet: m.objet, extrait: m.extrait }));\n\nreturn [{ json: { mails, aAnalyser } }];"
+      },
+      "id": "b2c3d4e5-0004-4000-8000-000000000004",
+      "name": "Règles simples",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'gpt-5-mini',\n  reasoning_effort: 'minimal',\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: \"Tu tries des mails personnels. 'important' = écrit par une vraie personne, ou banque, impôts/administration, santé, travail/études, logement, facture ou commande, sécurité du compte. 'autre' = tout le reste (notifications, réseaux sociaux, pubs). Réponds uniquement en JSON : {\\\"<id>\\\": \\\"important\\\" ou \\\"autre\\\"} pour chaque mail.\" },\n    { role: 'user', content: JSON.stringify($json.aAnalyser) }\n  ]\n}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "b2c3d4e5-0005-4000-8000-000000000005",
+      "name": "Classement IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine règles + IA et trouve l'ID Gmail de chaque étiquette Tri/...\nconst { mails } = $('Règles simples').first().json;\n\nlet ia = {};\ntry { ia = JSON.parse($input.first().json.choices[0].message.content); } catch (e) {}\n\n// Comparaison sans majuscules ni espaces : \"tri / important\" = \"Tri/Important\"\nconst norm = s => (s || '').toLowerCase().replace(/\\s+/g, '');\nconst etiquettes = $('Lire les étiquettes').all().map(l => l.json);\nconst ids = {};\nfor (const l of etiquettes) ids[norm(l.name)] = l.id;\n\nconst noms = { important: 'Tri/Important', newsletter: 'Tri/Newsletter', autre: 'Tri/Autre' };\nfor (const nom of Object.values(noms)) {\n  if (!ids[norm(nom)]) {\n    const perso = etiquettes.filter(l => l.type === 'user').map(l => l.name).join(', ');\n    throw new Error(`Étiquette Gmail introuvable : ${nom}. Étiquettes trouvées : ${perso || 'aucune'}`);\n  }\n}\n\nreturn mails.map(m => {\n  const categorie = m.categorie || (ia[m.id] === 'important' ? 'important' : 'autre');\n  return { json: { categorie, de: m.de, objet: m.objet, id: m.id, labelId: ids[norm(noms[categorie])] } };\n});"
+      },
+      "id": "b2c3d4e5-0006-4000-8000-000000000006",
+      "name": "Décision finale",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": "={{ [$json.labelId] }}"
+      },
+      "id": "b2c3d4e5-0007-4000-8000-000000000007",
+      "name": "Ajouter l'étiquette",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1320, 200]
+    }
+  ],
+  "connections": {
+    "Lancer à la main": {
+      "main": [[{ "node": "Lire les étiquettes", "type": "main", "index": 0 }]]
+    },
+    "Toutes les 3 minutes": {
+      "main": [[{ "node": "Lire les étiquettes", "type": "main", "index": 0 }]]
+    },
+    "Lire les étiquettes": {
+      "main": [[{ "node": "Lire 50 mails non triés", "type": "main", "index": 0 }]]
+    },
+    "Lire 50 mails non triés": {
+      "main": [[{ "node": "Règles simples", "type": "main", "index": 0 }]]
+    },
+    "Règles simples": {
+      "main": [[{ "node": "Classement IA", "type": "main", "index": 0 }]]
+    },
+    "Classement IA": {
+      "main": [[{ "node": "Décision finale", "type": "main", "index": 0 }]]
+    },
+    "Décision finale": {
+      "main": [[{ "node": "Ajouter l'étiquette", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {}
+}
