@@ -1,0 +1,18 @@
+# n8n en local (étape 0). Aucune clé ici : les identifiants se saisissent dans n8n.
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"   # accessible uniquement depuis ce PC
+    environment:
+      - GENERIC_TIMEZONE=Europe/Paris
+      - TZ=Europe/Paris
+      - N8N_SECURE_COOKIE=false  # nécessaire en http://localhost (sera retiré en HTTPS)
+      - N8N_DIAGNOSTICS_ENABLED=false
+    volumes:
+      - n8n_data:/home/node/.n8n  # workflows + identifiants chiffrés
+
+volumes:
+  n8n_data:

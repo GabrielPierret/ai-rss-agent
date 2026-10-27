@@ -1,0 +1,123 @@
+{
+  "name": "01 - Veille RSS quotidienne",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Chaque matin 7h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://openai.com/news/rss.xml"
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "RSS OpenAI News",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [240, 100]
+    },
+    {
+      "parameters": {
+        "url": "https://www.cert.ssi.gouv.fr/feed/"
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "RSS CERT-FR",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Attendre les 2 flux",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [480, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Garde les 5 derniers articles de chaque flux et construit le texte envoyé à OpenAI\nconst sources = {\n  'OpenAI News': $('RSS OpenAI News').all(),\n  'CERT-FR': $('RSS CERT-FR').all(),\n};\n\nlet texte = '';\nfor (const [nom, items] of Object.entries(sources)) {\n  texte += `\\n## ${nom}\\n`;\n  for (const it of items.slice(0, 5)) {\n    const a = it.json;\n    const extrait = (a.contentSnippet || a.content || '').slice(0, 400);\n    texte += `- Titre : ${a.title}\\n  Lien : ${a.link}\\n  Date : ${a.pubDate || ''}\\n  Extrait : ${extrait}\\n`;\n  }\n}\n\nreturn [{ json: { texte } }];"
+      },
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Préparer le texte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'gpt-5-mini',\n  messages: [\n    { role: 'system', content: \"Tu es un assistant de veille. Tu réponds uniquement par un fragment HTML simple (h3, ul, li, a, p, strong), sans balise ```, sans <html> ni <body>.\" },\n    { role: 'user', content: \"Voici les derniers articles de mes flux RSS. Pour chaque source, fais un titre <h3>, puis une liste où chaque article = lien cliquable sur son titre + résumé en français d'une phrase. Termine par un paragraphe <p><strong>À retenir :</strong> ...</p> de 3 points maximum.\\n\" + $json.texte }\n  ]\n}) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Résumé OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "TON_ADRESSE@gmail.com",
+        "toEmail": "TON_ADRESSE@gmail.com",
+        "subject": "={{ 'Veille du ' + $now.setLocale('fr').toFormat('cccc d LLLL') }}",
+        "emailFormat": "html",
+        "html": "={{ $json.choices[0].message.content }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-4000-8000-000000000007",
+      "name": "Envoyer le mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1200, 200]
+    }
+  ],
+  "connections": {
+    "Chaque matin 7h": {
+      "main": [
+        [
+          { "node": "RSS OpenAI News", "type": "main", "index": 0 },
+          { "node": "RSS CERT-FR", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "RSS OpenAI News": {
+      "main": [[{ "node": "Attendre les 2 flux", "type": "main", "index": 0 }]]
+    },
+    "RSS CERT-FR": {
+      "main": [[{ "node": "Attendre les 2 flux", "type": "main", "index": 1 }]]
+    },
+    "Attendre les 2 flux": {
+      "main": [[{ "node": "Préparer le texte", "type": "main", "index": 0 }]]
+    },
+    "Préparer le texte": {
+      "main": [[{ "node": "Résumé OpenAI", "type": "main", "index": 0 }]]
+    },
+    "Résumé OpenAI": {
+      "main": [[{ "node": "Envoyer le mail", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {}
+}
